@@ -18,3 +18,17 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
 }
+
+.desert-scene canvas {
+  display: block;
+  height: 100%;
+  width: 100%;
+  outline: none;
+  touch-action: none;
+}
+
+.desert-fallback {
+  background:
+    radial-gradient(ellipse at 72% 34%, rgba(255, 220, 172, 0.9), transparent 8%),
+    linear-gradient(180deg, #211a2a 0%, #60404a 28%, #c47b59 68%, #bd7955 100%);
+}
