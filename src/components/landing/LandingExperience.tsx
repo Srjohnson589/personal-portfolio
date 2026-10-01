@@ -1,32 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import OceanScene, { type OceanMood } from "./OceanScene";
-
-const moods: { id: OceanMood; label: string; swatch: string }[] = [
-  { id: "dawn", label: "Dawn", swatch: "bg-[#d99a88]" },
-  { id: "day", label: "Daylight", swatch: "bg-[#82b9c6]" },
-  { id: "dusk", label: "Sunset", swatch: "bg-[#c77b69]" },
-  { id: "night", label: "Night", swatch: "bg-[#303d61]" },
-];
+import DesertScene from "./DesertScene";
 
 export default function LandingExperience() {
-  const [mood, setMood] = useState<OceanMood>("dusk");
-  const [waveAmount, setWaveAmount] = useState(68);
-  const [perspective, setPerspective] = useState(50);
-  const [paused, setPaused] = useState(false);
-
   return (
-    <main className="relative isolate h-dvh min-h-[620px] w-full overflow-hidden bg-[#12131e] text-[#f8f1e8]">
-      <OceanScene
-        mood={mood}
-        waveAmount={waveAmount}
-        perspective={perspective}
-        paused={paused}
-      />
+    <main className="relative isolate h-dvh min-h-[620px] w-full overflow-hidden bg-[#211a22] text-[#fff5e8]">
+      <DesertScene />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#100f1c]/35 via-transparent to-[#090d17]/45"
+        className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#171423]/30 via-transparent to-[#21151c]/35"
       />
 
       <header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between px-6 py-6 sm:px-10 sm:py-8">
@@ -39,7 +21,7 @@ export default function LandingExperience() {
           </span>
           <span>Sarah Johnson</span>
         </a>
-        <span className="hidden text-[10px] uppercase tracking-[0.28em] text-white/60 sm:block">
+        <span className="hidden text-[10px] uppercase tracking-[0.28em] text-white/65 sm:block">
           Software engineer&nbsp; · &nbsp;Backend / APIs / AI
         </span>
       </header>
@@ -48,9 +30,9 @@ export default function LandingExperience() {
         id="about"
         className="pointer-events-none absolute inset-x-0 top-1/2 z-10 -translate-y-1/2 px-5 sm:px-10 lg:px-14"
       >
-        <div className="pointer-events-auto max-w-[min(42rem,calc(100vw-2.5rem))] rounded-[1.75rem] border border-white/20 bg-[#17151a]/45 p-6 shadow-[0_24px_100px_rgba(15,10,15,.25)] backdrop-blur-xl sm:p-9 lg:p-11">
-          <p className="mb-4 font-mono text-[10px] uppercase tracking-[0.32em] text-[#f2d2a3]/85 sm:text-xs">
-            Thoughtful systems, made real
+        <div className="pointer-events-auto max-w-[min(42rem,calc(100vw-2.5rem))] rounded-[1.75rem] border border-white/20 bg-[#201a20]/45 p-6 shadow-[0_24px_100px_rgba(20,12,16,.32)] backdrop-blur-xl sm:p-9 lg:p-11">
+          <p className="mb-4 font-mono text-[10px] uppercase tracking-[0.32em] text-[#f4d1a0]/85 sm:text-xs">
+            Building useful things, thoughtfully
           </p>
           <h1 className="font-serif text-5xl font-light leading-[0.95] tracking-[-0.055em] text-white drop-shadow sm:text-7xl lg:text-[6.5rem]">
             Sarah
@@ -85,87 +67,16 @@ export default function LandingExperience() {
             </a>
             <span className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.2em] text-white/45">
               <span aria-hidden="true" className="h-px w-6 bg-[#f2d2a3]/70" />
-              Explore the scene
+              The open dunes
             </span>
           </div>
         </div>
       </section>
 
-      <aside
-        aria-label="Ocean scene controls"
-        className="absolute bottom-5 left-1/2 z-20 w-[min(94vw,34rem)] -translate-x-1/2 rounded-2xl border border-white/20 bg-[#16151a]/60 p-4 shadow-2xl backdrop-blur-xl sm:bottom-auto sm:left-auto sm:right-6 sm:top-1/2 sm:w-56 sm:-translate-y-1/2 sm:translate-x-0 sm:rounded-[1.5rem] sm:p-5 lg:right-10"
-      >
-        <div className="flex items-center justify-between sm:mb-5">
-          <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-white/55">
-            Scene controls
-          </p>
-          <button
-            type="button"
-            onClick={() => setPaused((value) => !value)}
-            aria-pressed={paused}
-            className="rounded-full border border-white/20 px-3 py-1.5 text-[10px] uppercase tracking-[0.15em] text-white/75 transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f2d2a3]"
-          >
-            {paused ? "Play waves" : "Pause"}
-          </button>
-        </div>
-
-        <div className="mt-3 grid grid-cols-4 gap-2 sm:mt-0 sm:grid-cols-2">
-          {moods.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              onClick={() => setMood(option.id)}
-              aria-pressed={mood === option.id}
-              className={`flex items-center justify-center gap-2 rounded-full border px-2 py-2 text-[9px] uppercase tracking-[0.12em] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f2d2a3] sm:justify-start sm:px-3 sm:text-[10px] ${
-                mood === option.id
-                  ? "border-[#f2d2a3]/80 bg-white/15 text-white"
-                  : "border-white/15 text-white/60 hover:bg-white/10 hover:text-white"
-              }`}
-            >
-              <span className={`h-2 w-2 rounded-full ${option.swatch}`} />
-              {option.label}
-            </button>
-          ))}
-        </div>
-
-        <label className="mt-4 block sm:mt-6">
-          <span className="flex justify-between font-mono text-[9px] uppercase tracking-[0.16em] text-white/60">
-            Wave intensity <span>{waveAmount}%</span>
-          </span>
-          <input
-            type="range"
-            min="10"
-            max="100"
-            value={waveAmount}
-            onChange={(event) => setWaveAmount(Number(event.target.value))}
-            className="mt-2 h-1.5 w-full cursor-pointer accent-[#f1d0a0]"
-            aria-label="Wave intensity"
-          />
-        </label>
-
-        <label className="mt-3 block sm:mt-5">
-          <span className="flex justify-between font-mono text-[9px] uppercase tracking-[0.16em] text-white/60">
-            Horizon <span>{perspective}%</span>
-          </span>
-          <input
-            type="range"
-            min="20"
-            max="80"
-            value={perspective}
-            onChange={(event) => setPerspective(Number(event.target.value))}
-            className="mt-2 h-1.5 w-full cursor-pointer accent-[#f1d0a0]"
-            aria-label="Horizon height"
-          />
-        </label>
-
-        <p className="mt-4 hidden border-t border-white/15 pt-4 text-[10px] leading-5 text-white/45 sm:block">
-          Drag the water to look around. Use arrow keys when the scene is
-          focused.
+      <div className="pointer-events-none absolute inset-x-0 bottom-7 z-10 flex justify-center px-5">
+        <p className="rounded-full border border-white/15 bg-[#201a20]/35 px-4 py-2 font-mono text-[9px] uppercase tracking-[0.19em] text-white/65 backdrop-blur-sm sm:text-[10px]">
+          Drag to look&nbsp; · &nbsp;W A S D or arrow keys to wander
         </p>
-      </aside>
-
-      <div className="pointer-events-none absolute bottom-5 left-6 z-10 hidden font-mono text-[9px] uppercase tracking-[0.22em] text-white/45 sm:block sm:left-10">
-        A portfolio in motion
       </div>
     </main>
   );
