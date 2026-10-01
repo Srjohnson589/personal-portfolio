@@ -64,6 +64,7 @@ export default function OceanScene({
     let elapsed = 0;
     let previousTime = 0;
     let glints: { x: number; depth: number; phase: number; length: number }[] = [];
+    let clouds: { x: number; y: number; width: number; height: number; opacity: number; speed: number }[] = [];
     const palette = PALETTES[mood];
     const sunX = 0.72;
 
@@ -82,6 +83,14 @@ export default function OceanScene({
         phase: Math.random() * Math.PI * 2,
         length: 2 + Math.random() * 18,
       }));
+      clouds = Array.from({ length: Math.round(width / 24) }, () => ({
+        x: Math.random(),
+        y: 0.27 + Math.random() * 0.27,
+        width: 0.025 + Math.random() * 0.12,
+        height: 0.006 + Math.random() * 0.024,
+        opacity: 0.035 + Math.random() * 0.11,
+        speed: 0.3 + Math.random() * 0.8,
+      }));
     };
 
     const paint = (time: number) => {
@@ -89,6 +98,7 @@ export default function OceanScene({
       const horizon = clamp(height * (0.51 + (perspective - 50) * 0.0022) + look.y * 34, height * 0.38, height * 0.66);
       const shiftX = look.x * 38;
       const currentTime = time / 1000;
+      const waveSpeed = reducedMotion || paused ? 0 : currentTime;
 
       const sky = ctx.createLinearGradient(0, 0, 0, horizon + height * 0.12);
       sky.addColorStop(0, palette.sky[0]);
@@ -122,6 +132,36 @@ export default function OceanScene({
       ctx.fill();
       ctx.globalAlpha = 1;
 
+      ctx.save();
+      ctx.filter = `blur(${Math.max(5, height * 0.009)}px)`;
+      for (const cloud of clouds) {
+        const drift = waveSpeed * cloud.speed * 2.2;
+        const cloudX = ((cloud.x * width + drift + width) % (width + cloud.width * width)) - cloud.width * width * 0.5;
+        const cloudY = horizon * cloud.y;
+        const cloudWidth = cloud.width * width;
+        const cloudHeight = cloud.height * height;
+        const cloudGradient = ctx.createLinearGradient(
+          cloudX - cloudWidth / 2,
+          cloudY,
+          cloudX + cloudWidth / 2,
+          cloudY,
+        );
+        const tint = mood === "night" ? "190,205,233" : mood === "day" ? "255,242,211" : "255,196,158";
+        cloudGradient.addColorStop(0, `rgba(${tint},0)`);
+        cloudGradient.addColorStop(0.24, `rgba(${tint},${cloud.opacity})`);
+        cloudGradient.addColorStop(0.72, `rgba(${tint},${cloud.opacity * 1.5})`);
+        cloudGradient.addColorStop(1, `rgba(${tint},0)`);
+        ctx.fillStyle = cloudGradient;
+        ctx.beginPath();
+        ctx.ellipse(cloudX, cloudY, cloudWidth / 2, cloudHeight, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(cloudX - cloudWidth * 0.16, cloudY - cloudHeight * 0.38, cloudWidth * 0.28, cloudHeight * 0.7, -0.08, 0, Math.PI * 2);
+        ctx.ellipse(cloudX + cloudWidth * 0.18, cloudY - cloudHeight * 0.22, cloudWidth * 0.24, cloudHeight * 0.62, 0.06, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+
       if (mood === "night") {
         for (let i = 0; i < 90; i += 1) {
           const x = ((i * 193.7) % Math.max(width, 1));
@@ -138,7 +178,6 @@ export default function OceanScene({
       ctx.fillStyle = water;
       ctx.fillRect(0, horizon, width, height - horizon);
 
-      const waveSpeed = reducedMotion || paused ? 0 : currentTime;
       const rowCount = Math.max(36, Math.min(72, Math.round(height / 12)));
       for (let row = 0; row < rowCount; row += 1) {
         const depth = row / (rowCount - 1);
