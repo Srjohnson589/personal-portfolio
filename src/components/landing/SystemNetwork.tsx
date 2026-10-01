@@ -307,7 +307,6 @@ export default function SystemNetwork() {
                 onMouseLeave={() => setHover(node.id, false)}
                 onFocus={() => setHover(node.id, true)}
                 onBlur={() => setHover(node.id, false)}
-                onClick={(event) => event.preventDefault()}
               >
                 <span
                   ref={(el) => {
