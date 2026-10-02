@@ -482,6 +482,7 @@ export default function DesertScene() {
     const camera = new THREE.PerspectiveCamera(57, window.innerWidth / window.innerHeight, 0.1, 700);
     const cameraState = cameraRef.current;
     const walkSpeed = 15;
+    let pendingTravel = 0;
 
     const { dome, material: skyMaterial } = createSky();
     scene.add(dome);
@@ -661,12 +662,8 @@ export default function DesertScene() {
       updateCamera();
     };
 
-    const moveForward = (distance: number) => {
-      cameraState.x += Math.sin(cameraState.yaw) * distance;
-      cameraState.z -= Math.cos(cameraState.yaw) * distance;
-      cameraState.x = clamp(cameraState.x, -140, 140);
-      cameraState.z = clamp(cameraState.z, -350, 80);
-      updateCamera();
+    const queueTravel = (distance: number) => {
+      pendingTravel = clamp(pendingTravel + distance, -80, 80);
     };
 
     const updateSand = (delta: number) => {
@@ -726,8 +723,8 @@ export default function DesertScene() {
 
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
-      const step = clamp(-event.deltaY * 0.015, -18, 18);
-      moveForward(step);
+      const step = clamp(-event.deltaY * 0.008, -8, 8);
+      queueTravel(step);
     };
 
     const animate = (time: number) => {
@@ -741,6 +738,14 @@ export default function DesertScene() {
       const lateral = Number(keys.has("d") || keys.has("arrowright")) - Number(keys.has("a") || keys.has("arrowleft"));
       cameraState.x += (Math.cos(cameraState.yaw) * lateral + Math.sin(cameraState.yaw) * forward) * walkSpeed * delta;
       cameraState.z += (Math.sin(cameraState.yaw) * lateral - Math.cos(cameraState.yaw) * forward) * walkSpeed * delta;
+
+      if (Math.abs(pendingTravel) > 0.001) {
+        const travelStep = pendingTravel * Math.min(1, delta * 6.5);
+        cameraState.x += Math.sin(cameraState.yaw) * travelStep;
+        cameraState.z -= Math.cos(cameraState.yaw) * travelStep;
+        pendingTravel -= travelStep;
+      }
+
       cameraState.x = clamp(cameraState.x, -140, 140);
       cameraState.z = clamp(cameraState.z, -350, 80);
 
@@ -870,7 +875,7 @@ export default function DesertScene() {
     const handlePointerUp = () => {
       const drag = dragRef.current;
       if (drag && !drag.moved) {
-        moveForward(14);
+        queueTravel(14);
       }
       dragRef.current = null;
     };
