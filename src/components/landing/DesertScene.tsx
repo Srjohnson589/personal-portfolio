@@ -437,7 +437,13 @@ function createCurvePoints(a: THREE.Vector3, b: THREE.Vector3, lift = 12) {
 export default function DesertScene() {
   const mountRef = useRef<HTMLDivElement>(null);
   const cameraRef = useRef<CameraState>({ x: 0, z: 46, yaw: 0, pitch: -0.045 });
-  const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null);
+  const dragRef = useRef<{
+    x: number;
+    y: number;
+    yaw: number;
+    pitch: number;
+    moved: boolean;
+  } | null>(null);
   const keysRef = useRef(new Set<string>());
   const reducedMotion = usePrefersReducedMotion();
 
@@ -465,6 +471,7 @@ export default function DesertScene() {
 
     const camera = new THREE.PerspectiveCamera(57, window.innerWidth / window.innerHeight, 0.1, 700);
     const cameraState = cameraRef.current;
+    const walkSpeed = 15;
 
     const { dome, material: skyMaterial } = createSky();
     scene.add(dome);
@@ -614,6 +621,14 @@ export default function DesertScene() {
       updateCamera();
     };
 
+    const moveForward = (distance: number) => {
+      cameraState.x += Math.sin(cameraState.yaw) * distance;
+      cameraState.z -= Math.cos(cameraState.yaw) * distance;
+      cameraState.x = clamp(cameraState.x, -140, 140);
+      cameraState.z = clamp(cameraState.z, -350, 80);
+      updateCamera();
+    };
+
     const updateSand = (delta: number) => {
       const { positions, velocities } = sandState;
       const windX = 7.2;
@@ -642,13 +657,19 @@ export default function DesertScene() {
 
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
-      if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) {
+      if (["w", "a", "s", "d"].includes(key)) {
         keysRef.current.add(key);
         if (event.target === renderer.domElement) event.preventDefault();
       }
     };
     const onKeyUp = (event: KeyboardEvent) => keysRef.current.delete(event.key.toLowerCase());
     const clearKeys = () => keysRef.current.clear();
+
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const step = clamp(-event.deltaY * 0.015, -18, 18);
+      moveForward(step);
+    };
 
     const animate = (time: number) => {
       if (disposed) return;
@@ -657,9 +678,8 @@ export default function DesertScene() {
       elapsed += delta;
 
       const keys = keysRef.current;
-      const forward = Number(keys.has("w") || keys.has("arrowup")) - Number(keys.has("s") || keys.has("arrowdown"));
-      const lateral = Number(keys.has("d") || keys.has("arrowright")) - Number(keys.has("a") || keys.has("arrowleft"));
-      const walkSpeed = 15;
+      const forward = Number(keys.has("w")) - Number(keys.has("s"));
+      const lateral = Number(keys.has("d")) - Number(keys.has("a"));
       cameraState.x += (Math.cos(cameraState.yaw) * lateral + Math.sin(cameraState.yaw) * forward) * walkSpeed * delta;
       cameraState.z += (Math.sin(cameraState.yaw) * lateral - Math.cos(cameraState.yaw) * forward) * walkSpeed * delta;
       cameraState.x = clamp(cameraState.x, -140, 140);
@@ -772,6 +792,7 @@ export default function DesertScene() {
         y: event.clientY,
         yaw: cameraState.yaw,
         pitch: cameraState.pitch,
+        moved: false,
       };
       renderer.domElement.setPointerCapture(event.pointerId);
     };
@@ -779,25 +800,33 @@ export default function DesertScene() {
     const handlePointerMove = (event: globalThis.PointerEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
+      if (Math.abs(event.clientX - drag.x) > 4 || Math.abs(event.clientY - drag.y) > 4) {
+        drag.moved = true;
+      }
       cameraState.yaw = drag.yaw - (event.clientX - drag.x) * 0.0035;
       cameraState.pitch = clamp(drag.pitch + (event.clientY - drag.y) * 0.0024, -0.62, 0.48);
       updateCamera();
     };
 
     const handlePointerUp = () => {
+      const drag = dragRef.current;
+      if (drag && !drag.moved) {
+        moveForward(14);
+      }
       dragRef.current = null;
     };
 
     renderer.domElement.tabIndex = 0;
     renderer.domElement.setAttribute(
       "aria-label",
-      "Immersive desert. Drag to look around. Use W A S D or arrow keys to walk.",
+      "Immersive desert. Drag to look around. Click or scroll to move through the environment.",
     );
     renderer.domElement.setAttribute("role", "group");
     renderer.domElement.addEventListener("pointerdown", handlePointerDown);
     renderer.domElement.addEventListener("pointermove", handlePointerMove);
     renderer.domElement.addEventListener("pointerup", handlePointerUp);
     renderer.domElement.addEventListener("pointercancel", handlePointerUp);
+    renderer.domElement.addEventListener("wheel", handleWheel, { passive: false });
 
     window.addEventListener("resize", resize);
     window.addEventListener("keydown", onKeyDown);
@@ -817,6 +846,7 @@ export default function DesertScene() {
       renderer.domElement.removeEventListener("pointermove", handlePointerMove);
       renderer.domElement.removeEventListener("pointerup", handlePointerUp);
       renderer.domElement.removeEventListener("pointercancel", handlePointerUp);
+      renderer.domElement.removeEventListener("wheel", handleWheel);
 
       terrainGeometry.dispose();
       (terrain.material as THREE.Material).dispose();
