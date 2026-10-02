@@ -42,7 +42,7 @@ Open [http://localhost:3000](http://localhost:3000) to view the site.
 - `src/hooks` — shared hooks for pointer tracking, reduced-motion
   preference, and viewport size, used across the landing components
 
-Add `/public/sarah-ferg.jpg` to replace the placeholder "SJ" initials with
+Add `/public/sarah-ferg.png` to replace the placeholder "SJ" initials with
 a real portrait.
 
 ## Scripts

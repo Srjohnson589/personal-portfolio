@@ -6,6 +6,105 @@ import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 type CameraState = { x: number; z: number; yaw: number; pitch: number };
 type SandState = { positions: Float32Array; velocities: Float32Array };
+type AreaDefinition = {
+  id: string;
+  label: string;
+  description: string;
+  x: number;
+  z: number;
+  width: number;
+  height: number;
+  depth: number;
+  hue: number;
+};
+type AreaRuntime = {
+  group: THREE.Group;
+  glow: THREE.Mesh;
+  core: THREE.Mesh;
+  label: THREE.Sprite;
+  labelMaterial: THREE.SpriteMaterial;
+  beams: THREE.Mesh[];
+  nodes: THREE.Mesh[];
+  prominence: number;
+  target: number;
+};
+type NetworkEdge = {
+  from: string;
+  to: string;
+  curve: THREE.QuadraticBezierCurve3;
+  line: THREE.Line;
+  packet: THREE.Mesh;
+  packetPhase: number;
+  packetSpeed: number;
+};
+
+const TECH_AREAS: AreaDefinition[] = [
+  {
+    id: "backend",
+    label: "BACKEND",
+    description: "Distributed services, queues, and orchestration",
+    x: -54,
+    z: -126,
+    width: 3.8,
+    height: 25,
+    depth: 4,
+    hue: 32,
+  },
+  {
+    id: "apis",
+    label: "APIs",
+    description: "Interfaces, versioning, and request flows",
+    x: 2,
+    z: -178,
+    width: 3.4,
+    height: 18,
+    depth: 3.6,
+    hue: 36,
+  },
+  {
+    id: "integrations",
+    label: "INTEGRATIONS",
+    description: "External systems wired together carefully",
+    x: 52,
+    z: -152,
+    width: 4.2,
+    height: 21,
+    depth: 4,
+    hue: 25,
+  },
+  {
+    id: "data",
+    label: "DATA",
+    description: "Pipelines, integrity, and movement between systems",
+    x: -10,
+    z: -232,
+    width: 4.5,
+    height: 23,
+    depth: 4.3,
+    hue: 18,
+  },
+  {
+    id: "ai",
+    label: "AI",
+    description: "LLM-enabled workflows with quiet persistence",
+    x: 88,
+    z: -198,
+    width: 3.6,
+    height: 19,
+    depth: 3.8,
+    hue: 44,
+  },
+];
+
+const NETWORK_EDGES: Array<[string, string]> = [
+  ["backend", "apis"],
+  ["apis", "integrations"],
+  ["integrations", "data"],
+  ["backend", "integrations"],
+  ["backend", "ai"],
+  ["apis", "ai"],
+  ["data", "backend"],
+];
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
@@ -137,6 +236,230 @@ function createSky() {
   return { dome, material };
 }
 
+function makeLabelTexture(label: string, emphasis = 1) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const radius = 24;
+  ctx.fillStyle = "rgba(20, 16, 18, 0.58)";
+  ctx.strokeStyle = `rgba(255, 224, 180, ${0.2 + emphasis * 0.18})`;
+  ctx.lineWidth = 2;
+  roundRect(ctx, 12, 12, 488, 104, radius);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.font = "600 34px ui-monospace, SFMono-Regular, Menlo, monospace";
+  ctx.fillStyle = `rgba(255, 238, 214, ${0.45 + emphasis * 0.45})`;
+  ctx.fillText(label, 30, 58);
+
+  ctx.font = "500 16px ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif";
+  ctx.fillStyle = `rgba(255, 240, 224, ${0.18 + emphasis * 0.46})`;
+  ctx.fillText("technical landscape", 30, 86);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function createAreaStructure(definition: AreaDefinition) {
+  const group = new THREE.Group();
+  group.position.set(definition.x, terrainHeight(definition.x, definition.z) - 0.35, definition.z);
+
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(definition.width * 0.95, definition.width * 1.2, 1.6, 8),
+    new THREE.MeshStandardMaterial({
+      color: `hsl(${definition.hue} 28% 39%)`,
+      roughness: 0.95,
+      metalness: 0.02,
+    }),
+  );
+  base.position.y = 0.8;
+  base.rotation.y = definition.x * 0.01;
+  group.add(base);
+
+  const core = new THREE.Mesh(
+    new THREE.BoxGeometry(definition.width, definition.height, definition.depth),
+    new THREE.MeshStandardMaterial({
+      color: `hsl(${definition.hue} 24% 48%)`,
+      roughness: 0.68,
+      metalness: 0.16,
+      transparent: true,
+      opacity: 0.86,
+    }),
+  );
+  core.position.y = definition.height * 0.5 + 1.3;
+  group.add(core);
+
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(Math.max(definition.width * 1.5, 3.4), 18, 14),
+    new THREE.MeshBasicMaterial({
+      color: "#ffd9a2",
+      transparent: true,
+      opacity: 0.12,
+      depthWrite: false,
+    }),
+  );
+  glow.position.y = definition.height * 0.72 + 4;
+  group.add(glow);
+
+  const nodeA = new THREE.Mesh(
+    new THREE.SphereGeometry(0.9, 16, 12),
+    new THREE.MeshBasicMaterial({ color: "#ffe8c6", transparent: true, opacity: 0.82 }),
+  );
+  nodeA.position.set(-definition.width * 0.8, definition.height * 0.64, 0);
+  group.add(nodeA);
+
+  const nodeB = new THREE.Mesh(
+    new THREE.SphereGeometry(0.7, 16, 12),
+    new THREE.MeshBasicMaterial({ color: "#ffd9a0", transparent: true, opacity: 0.66 }),
+  );
+  nodeB.position.set(definition.width * 0.72, definition.height * 0.38, definition.depth * 0.3);
+  group.add(nodeB);
+
+  const beams: THREE.Mesh[] = [];
+  const beamCount = 3;
+  for (let i = 0; i < beamCount; i += 1) {
+    const beam = new THREE.Mesh(
+      new THREE.BoxGeometry(definition.width * (0.24 + i * 0.04), 1.6, 0.3),
+      new THREE.MeshBasicMaterial({
+        color: "#ffd6a0",
+        transparent: true,
+        opacity: 0.14 + i * 0.05,
+      }),
+    );
+    beam.position.set(0, definition.height * (0.26 + i * 0.19), definition.depth * (0.08 * i - 0.07));
+    beams.push(beam);
+    group.add(beam);
+  }
+
+  const labelTexture = makeLabelTexture(definition.label, 0.7);
+  const labelMaterial = new THREE.SpriteMaterial({
+    map: labelTexture ?? undefined,
+    transparent: true,
+    depthWrite: false,
+    opacity: 0.08,
+    color: "#ffe7c2",
+  });
+  const label = new THREE.Sprite(labelMaterial);
+  label.scale.set(17, 4.25, 1);
+  label.position.set(0, definition.height + 8.2, 0);
+  group.add(label);
+
+  const nodes = [nodeA, nodeB];
+
+  return {
+    group,
+    glow,
+    core,
+    label,
+    labelMaterial,
+    beams,
+    nodes,
+    prominence: 0.18,
+    target: 0.18,
+  } satisfies AreaRuntime;
+}
+
+function createPortraitDisplay(texture: THREE.Texture) {
+  const group = new THREE.Group();
+  const frame = new THREE.Mesh(
+    new THREE.BoxGeometry(17, 24, 1.2),
+    new THREE.MeshStandardMaterial({
+      color: "#6f4e39",
+      roughness: 0.78,
+      metalness: 0.08,
+    }),
+  );
+  frame.rotation.y = -0.18;
+  frame.position.set(-6, 12.5, 0);
+  group.add(frame);
+
+  const plate = new THREE.Mesh(
+    new THREE.PlaneGeometry(15.4, 21.4),
+    new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      opacity: 0.95,
+      toneMapped: false,
+    }),
+  );
+  plate.position.set(-6, 12.55, 0.72);
+  plate.rotation.y = -0.18;
+  group.add(plate);
+
+  const veil = new THREE.Mesh(
+    new THREE.PlaneGeometry(16.2, 22.1),
+    new THREE.MeshBasicMaterial({
+      color: "#f7d7ad",
+      transparent: true,
+      opacity: 0.12,
+      depthWrite: false,
+    }),
+  );
+  veil.position.set(-6, 12.6, 0.82);
+  veil.rotation.y = -0.18;
+  group.add(veil);
+
+  const halo = new THREE.Mesh(
+    new THREE.RingGeometry(10.5, 11.8, 32),
+    new THREE.MeshBasicMaterial({
+      color: "#ffd8aa",
+      transparent: true,
+      opacity: 0.18,
+      side: THREE.DoubleSide,
+    }),
+  );
+  halo.position.set(-6, 12.8, -0.15);
+  halo.rotation.y = -0.18;
+  group.add(halo);
+
+  return { group, plate, frame, halo };
+}
+
+function createPacketMaterial() {
+  return new THREE.MeshBasicMaterial({
+    color: "#fff1d0",
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: false,
+  });
+}
+
+function createCurvePoints(a: THREE.Vector3, b: THREE.Vector3, lift = 12) {
+  const control = new THREE.Vector3(
+    (a.x + b.x) / 2,
+    Math.max(a.y, b.y) + lift,
+    (a.z + b.z) / 2,
+  );
+  return new THREE.QuadraticBezierCurve3(a, control, b);
+}
+
 export default function DesertScene() {
   const mountRef = useRef<HTMLDivElement>(null);
   const cameraRef = useRef<CameraState>({ x: 0, z: 46, yaw: 0, pitch: -0.045 });
@@ -200,7 +523,7 @@ export default function DesertScene() {
     terrain.position.y = -1;
     scene.add(terrain);
 
-    const sandCount = 3600;
+    const sandCount = reducedMotion ? 1200 : 3600;
     const sandPositions = new Float32Array(sandCount * 3);
     const sandVelocities = new Float32Array(sandCount * 3);
     for (let i = 0; i < sandCount; i += 1) {
@@ -227,6 +550,85 @@ export default function DesertScene() {
     );
     scene.add(sand);
     const sandState: SandState = { positions: sandPositions, velocities: sandVelocities };
+
+    const portraitTexture = new THREE.TextureLoader().load("/sarah-ferg.png");
+    portraitTexture.colorSpace = THREE.SRGBColorSpace;
+    portraitTexture.generateMipmaps = true;
+    portraitTexture.minFilter = THREE.LinearMipmapLinearFilter;
+    portraitTexture.magFilter = THREE.LinearFilter;
+
+    const portraitDisplay = createPortraitDisplay(portraitTexture);
+    scene.add(portraitDisplay.group);
+
+    const areas = TECH_AREAS.map(createAreaStructure);
+    areas.forEach((area) => scene.add(area.group));
+
+    const areaMap = new Map(TECH_AREAS.map((area, index) => [area.id, { definition: area, runtime: areas[index] }]));
+
+    const networkGroup = new THREE.Group();
+    scene.add(networkGroup);
+
+    const packetMaterial = createPacketMaterial();
+    const networkEdges: NetworkEdge[] = [];
+
+    NETWORK_EDGES.forEach(([from, to], index) => {
+      const fromNode = areaMap.get(from);
+      const toNode = areaMap.get(to);
+      if (!fromNode || !toNode) return;
+
+      const fromPoint = new THREE.Vector3(
+        fromNode.definition.x,
+        terrainHeight(fromNode.definition.x, fromNode.definition.z) + fromNode.definition.height * 0.78 + 3,
+        fromNode.definition.z,
+      );
+      const toPoint = new THREE.Vector3(
+        toNode.definition.x,
+        terrainHeight(toNode.definition.x, toNode.definition.z) + toNode.definition.height * 0.78 + 3,
+        toNode.definition.z,
+      );
+
+      const curve = createCurvePoints(fromPoint, toPoint, 12 + (index % 3) * 3);
+      const linePoints = curve.getPoints(24);
+      const lineGeometry = new THREE.BufferGeometry().setFromPoints(linePoints);
+      const line = new THREE.Line(
+        lineGeometry,
+        new THREE.LineBasicMaterial({
+          color: "#ffdcb0",
+          transparent: true,
+          opacity: 0.12,
+        }),
+      );
+      networkGroup.add(line);
+
+      const packet = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 10), packetMaterial.clone());
+      networkGroup.add(packet);
+
+      networkEdges.push({
+        from,
+        to,
+        curve,
+        line,
+        packet,
+        packetPhase: (index * 0.17) % 1,
+        packetSpeed: 0.058 + index * 0.008,
+      });
+    });
+
+    const portraitAnchor = new THREE.Vector3(-6, terrainHeight(-6, -78) + 12, -78);
+    const portraitLink = createCurvePoints(
+      portraitAnchor,
+      new THREE.Vector3(TECH_AREAS[0].x, terrainHeight(TECH_AREAS[0].x, TECH_AREAS[0].z) + 16, TECH_AREAS[0].z),
+      10,
+    );
+    const portraitLine = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(portraitLink.getPoints(20)),
+      new THREE.LineBasicMaterial({
+        color: "#ffdcb0",
+        transparent: true,
+        opacity: 0.1,
+      }),
+    );
+    networkGroup.add(portraitLine);
 
     let frame = 0;
     let previousTime = 0;
@@ -267,7 +669,6 @@ export default function DesertScene() {
         if (positions[i + 2] > cameraState.z + 8) positions[i + 2] = cameraState.z - 240;
       }
       sandGeometry.attributes.position.needsUpdate = true;
-      sandGeometry.computeBoundingSphere();
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -285,6 +686,7 @@ export default function DesertScene() {
       const delta = previousTime === 0 ? 0 : Math.min((time - previousTime) / 1000, 0.04);
       previousTime = time;
       elapsed += delta;
+
       const keys = keysRef.current;
       const forward = Number(keys.has("w") || keys.has("arrowup")) - Number(keys.has("s") || keys.has("arrowdown"));
       const lateral = Number(keys.has("d") || keys.has("arrowright")) - Number(keys.has("a") || keys.has("arrowleft"));
@@ -298,6 +700,75 @@ export default function DesertScene() {
         updateSand(delta);
         skyMaterial.uniforms.uTime.value = elapsed;
       }
+
+      const cameraForward = new THREE.Vector3(
+        Math.sin(cameraState.yaw),
+        Math.sin(cameraState.pitch),
+        -Math.cos(cameraState.yaw),
+      ).normalize();
+      const cameraPosition = new THREE.Vector3(cameraState.x, terrain.position.y + terrainHeight(cameraState.x, cameraState.z) + 2.15, cameraState.z);
+
+      areas.forEach((area) => {
+        const worldPosition = new THREE.Vector3(area.group.position.x, area.group.position.y + 10, area.group.position.z);
+        const toArea = worldPosition.clone().sub(cameraPosition);
+        const distance = toArea.length();
+        const direction = toArea.normalize();
+        const facing = Math.max(0, cameraForward.dot(direction));
+        const proximity = Math.max(0, 1 - distance / 220);
+        const focus = clamp(proximity * 0.7 + facing * 0.8, 0, 1);
+        area.target = Math.max(0.14, focus);
+        area.prominence += (area.target - area.prominence) * 0.06;
+
+        area.group.scale.setScalar(0.95 + area.prominence * 0.11);
+        area.labelMaterial.opacity = 0.06 + area.prominence * 0.58;
+        area.label.material.needsUpdate = true;
+        area.glow.scale.setScalar(0.88 + area.prominence * 0.44);
+        area.glow.material.opacity = 0.08 + area.prominence * 0.14;
+        area.core.material.opacity = 0.54 + area.prominence * 0.34;
+        area.beams.forEach((beam, index) => {
+          beam.material.opacity = 0.08 + area.prominence * (0.05 + index * 0.03);
+        });
+        area.nodes.forEach((node, index) => {
+          (node.material as THREE.MeshBasicMaterial).opacity = 0.45 + area.prominence * (0.22 + index * 0.1);
+          node.scale.setScalar(0.95 + area.prominence * 0.3);
+        });
+      });
+
+      const portraitSwing = reducedMotion ? 0 : Math.sin(elapsed * 0.35) * 0.03;
+      portraitDisplay.group.rotation.y = -0.18 + portraitSwing;
+      portraitDisplay.frame.rotation.y = -0.18 + portraitSwing;
+      portraitDisplay.plate.rotation.y = -0.18 + portraitSwing;
+      portraitDisplay.halo.material.opacity = reducedMotion
+        ? 0.16
+        : 0.14 + Math.max(0, Math.sin(elapsed * 0.6)) * 0.06;
+
+      networkEdges.forEach((edge, index) => {
+        const from = areaMap.get(edge.from);
+        const to = areaMap.get(edge.to);
+        if (!from || !to) return;
+        const strength = (from.runtime.prominence + to.runtime.prominence) * 0.5;
+        const lineMaterial = edge.line.material as THREE.LineBasicMaterial;
+        lineMaterial.opacity = 0.08 + strength * 0.28;
+        edge.line.scale.setScalar(0.98 + strength * 0.03);
+
+        if (!reducedMotion) {
+          edge.packetPhase = (edge.packetPhase + delta * edge.packetSpeed) % 1;
+          const point = edge.curve.getPointAt((edge.packetPhase + index * 0.07) % 1);
+          edge.packet.position.copy(point);
+          const packetMaterialInstance = edge.packet.material as THREE.MeshBasicMaterial;
+          packetMaterialInstance.opacity = 0.28 + strength * 0.58;
+          edge.packet.scale.setScalar(0.76 + strength * 0.36);
+        } else {
+          const point = edge.curve.getPointAt((index * 0.19) % 1);
+          edge.packet.position.copy(point);
+        }
+      });
+
+      const portraitLineMaterial = portraitLine.material as THREE.LineBasicMaterial;
+      portraitLineMaterial.opacity = reducedMotion
+        ? 0.08
+        : 0.08 + Math.max(0, Math.sin(elapsed * 0.7)) * 0.04;
+
       updateCamera();
       frame = requestAnimationFrame(animate);
     };
@@ -353,6 +824,7 @@ export default function DesertScene() {
       renderer.domElement.removeEventListener("pointermove", handlePointerMove);
       renderer.domElement.removeEventListener("pointerup", handlePointerUp);
       renderer.domElement.removeEventListener("pointercancel", handlePointerUp);
+
       terrainGeometry.dispose();
       (terrain.material as THREE.Material).dispose();
       sandGeometry.dispose();
@@ -360,6 +832,29 @@ export default function DesertScene() {
       skyMaterial.dispose();
       (sun.material as THREE.Material).dispose();
       (sun.geometry as THREE.BufferGeometry).dispose();
+      portraitTexture.dispose();
+      portraitDisplay.frame.material.dispose();
+      portraitDisplay.plate.material.dispose();
+      portraitDisplay.halo.material.dispose();
+
+      areas.forEach((area) => {
+        (area.core.material as THREE.Material).dispose();
+        (area.glow.material as THREE.Material).dispose();
+        area.labelMaterial.map?.dispose();
+        area.labelMaterial.dispose();
+        area.beams.forEach((beam) => (beam.material as THREE.Material).dispose());
+        area.nodes.forEach((node) => (node.material as THREE.Material).dispose());
+      });
+
+      networkEdges.forEach((edge) => {
+        edge.line.geometry.dispose();
+        (edge.line.material as THREE.Material).dispose();
+        (edge.packet.material as THREE.Material).dispose();
+        edge.packet.geometry.dispose();
+      });
+      portraitLine.geometry.dispose();
+      (portraitLine.material as THREE.Material).dispose();
+      packetMaterial.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     };

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 /**
  * Renders Sarah's portrait with a graceful fallback to her initials when the
- * placeholder file at `/sarah-ferg.jpg` hasn't been added yet.
+ * placeholder file at `/sarah-ferg.png` isn't available.
  *
  * Plain `onError` isn't enough here: if the image request fails before
  * client-side hydration finishes, the browser's non-bubbling `error` event
@@ -30,7 +30,7 @@ export default function IdentityPortrait() {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           ref={imgRef}
-          src="/sarah-ferg.jpg"
+          src="/sarah-ferg.png"
           alt="Portrait of Sarah Johnson"
           className="h-full w-full object-cover"
           onError={() => setBroken(true)}
