@@ -688,8 +688,10 @@ export default function DesertScene() {
 
         const scale = node.definition.primary ? 0.92 + node.prominence * 0.12 : 0.96 + node.prominence * 0.08;
         node.group.scale.setScalar(scale);
-        node.column.material.opacity = 0.48 + node.prominence * (node.definition.primary ? 0.34 : 0.22);
-        node.cap.material.opacity = 0.08 + node.prominence * (node.definition.primary ? 0.18 : 0.1);
+        (node.column.material as THREE.MeshStandardMaterial).opacity =
+          0.48 + node.prominence * (node.definition.primary ? 0.34 : 0.22);
+        (node.cap.material as THREE.MeshBasicMaterial).opacity =
+          0.08 + node.prominence * (node.definition.primary ? 0.18 : 0.1);
         node.glow.scale.setScalar(0.88 + node.prominence * (node.definition.primary ? 0.58 : 0.26));
         (node.glow.material as THREE.MeshBasicMaterial).opacity = 0.03 + node.prominence * (node.definition.primary ? 0.16 : 0.08);
         node.labelMaterial.opacity = node.definition.primary
@@ -719,9 +721,9 @@ export default function DesertScene() {
       portraitFigure.group.position.x = -30 + Math.sin(cameraState.yaw) * 0.8;
       portraitFigure.group.position.z = -92 + Math.cos(cameraState.yaw) * 0.5;
       portraitFigure.group.rotation.y = 0.18 + cameraState.yaw * 0.05 + portraitSway;
-      portraitFigure.shadow.material.opacity = 0.2 + portraitFocus * 0.05;
-      portraitFigure.dustGlow.material.opacity = 0.05 + portraitFocus * 0.05;
-      portraitFigure.rim.material.opacity = 0.03 + portraitFocus * 0.05;
+      (portraitFigure.shadow.material as THREE.MeshBasicMaterial).opacity = 0.2 + portraitFocus * 0.05;
+      (portraitFigure.dustGlow.material as THREE.MeshBasicMaterial).opacity = 0.05 + portraitFocus * 0.05;
+      (portraitFigure.rim.material as THREE.MeshBasicMaterial).opacity = 0.03 + portraitFocus * 0.05;
       portraitFigure.body.scale.setScalar(0.98 + portraitFocus * 0.02);
 
       edges.forEach((edge, index) => {

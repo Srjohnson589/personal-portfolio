@@ -1,7 +1,6 @@
 "use client";
 
 import DesertScene from "./DesertScene";
-import IdentityPanel from "./IdentityPanel";
 
 export default function LandingExperience() {
   return (
@@ -13,24 +12,19 @@ export default function LandingExperience() {
       />
 
       <header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between px-5 py-5 sm:px-8 sm:py-7">
-        <a
-          href="#about"
-          className="pointer-events-auto flex items-center gap-3 text-[10px] font-medium uppercase tracking-[0.34em] text-white/88"
-        >
+        <div className="flex items-center gap-3 text-[10px] font-medium uppercase tracking-[0.34em] text-white/88">
           <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/78 font-serif text-sm tracking-normal">
             SJ
           </span>
           <span>Sarah Johnson</span>
-        </a>
+        </div>
         <span className="hidden text-[10px] uppercase tracking-[0.28em] text-white/60 sm:block">
           Software engineer&nbsp; · &nbsp;Backend / APIs / AI
         </span>
       </header>
 
-      <IdentityPanel />
-
       <div className="pointer-events-none absolute inset-x-0 bottom-7 z-10 flex justify-center px-5">
-        <p className="rounded-full border border-white/15 bg-[#201a20]/35 px-4 py-2 font-mono text-[9px] uppercase tracking-[0.19em] text-white/65 backdrop-blur-sm sm:text-[10px]">
+        <p className="rounded-full border border-white/10 bg-[#201a20]/22 px-4 py-2 font-mono text-[9px] uppercase tracking-[0.19em] text-white/48 backdrop-blur-sm sm:text-[10px]">
           Drag to look&nbsp; · &nbsp;W A S D or arrow keys to wander
         </p>
       </div>
