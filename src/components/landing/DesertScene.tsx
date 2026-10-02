@@ -723,10 +723,10 @@ export default function DesertScene() {
         area.labelMaterial.opacity = 0.06 + area.prominence * 0.58;
         area.label.material.needsUpdate = true;
         area.glow.scale.setScalar(0.88 + area.prominence * 0.44);
-        area.glow.material.opacity = 0.08 + area.prominence * 0.14;
-        area.core.material.opacity = 0.54 + area.prominence * 0.34;
+        (area.glow.material as THREE.MeshBasicMaterial).opacity = 0.08 + area.prominence * 0.14;
+        (area.core.material as THREE.MeshStandardMaterial).opacity = 0.54 + area.prominence * 0.34;
         area.beams.forEach((beam, index) => {
-          beam.material.opacity = 0.08 + area.prominence * (0.05 + index * 0.03);
+          (beam.material as THREE.MeshBasicMaterial).opacity = 0.08 + area.prominence * (0.05 + index * 0.03);
         });
         area.nodes.forEach((node, index) => {
           (node.material as THREE.MeshBasicMaterial).opacity = 0.45 + area.prominence * (0.22 + index * 0.1);
