@@ -25,7 +25,7 @@ export default function LandingExperience() {
 
       <div className="pointer-events-none absolute inset-x-0 bottom-7 z-10 flex justify-center px-5">
         <p className="rounded-full border border-white/10 bg-[#201a20]/22 px-4 py-2 font-mono text-[9px] uppercase tracking-[0.19em] text-white/48 backdrop-blur-sm sm:text-[10px]">
-          Drag to look&nbsp; · &nbsp;Click or scroll to move
+          Drag to look&nbsp; · &nbsp;Click, scroll, or arrows to move
         </p>
       </div>
     </main>
