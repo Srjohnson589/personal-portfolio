@@ -105,13 +105,16 @@ const clamp = (value: number, min: number, max: number) =>
 
 function terrainHeight(x: number, z: number) {
   const broadDunes =
-    Math.sin(z * 0.018 + Math.sin(x * 0.009) * 2.2) * 5.8 +
-    Math.sin(z * 0.009 + x * 0.006) * 4.2 +
-    Math.sin(x * 0.015 + z * 0.007) * 2.1;
+    Math.sin(z * 0.011 + Math.sin(x * 0.0045) * 1.65) * 9.8 +
+    Math.sin(z * 0.0065 + x * 0.0038) * 7.1 +
+    Math.sin(x * 0.0085 + z * 0.0045) * 4.1;
+  const duneShoulders =
+    Math.sin(z * 0.022 + x * 0.008) * 2.6 +
+    Math.sin(x * 0.02 - z * 0.01) * 1.7;
   const fineRidges =
-    Math.sin(z * 0.068 + Math.sin(x * 0.025) * 1.3) * 0.48 +
-    Math.sin(z * 0.11 + x * 0.018) * 0.2;
-  return broadDunes + fineRidges;
+    Math.sin(z * 0.068 + Math.sin(x * 0.025) * 1.3) * 0.52 +
+    Math.sin(z * 0.11 + x * 0.018) * 0.25;
+  return broadDunes + duneShoulders + fineRidges;
 }
 
 function createDuneTerrain() {
@@ -466,13 +469,6 @@ export default function DesertScene() {
     const { dome, material: skyMaterial } = createSky();
     scene.add(dome);
 
-    const sun = new THREE.Mesh(
-      new THREE.SphereGeometry(4.6, 32, 24),
-      new THREE.MeshBasicMaterial({ color: "#ffe5bd", toneMapped: false }),
-    );
-    sun.position.set(94, 38, -180);
-    scene.add(sun);
-
     const sunLight = new THREE.DirectionalLight("#ffd3a0", 3.3);
     sunLight.position.set(-80, 125, 80);
     scene.add(sunLight);
@@ -494,17 +490,20 @@ export default function DesertScene() {
     terrain.position.y = -1;
     scene.add(terrain);
 
-    const sandCount = reducedMotion ? 1200 : 3600;
+    const sandCount = reducedMotion ? 1000 : 3200;
     const sandPositions = new Float32Array(sandCount * 3);
     const sandVelocities = new Float32Array(sandCount * 3);
     for (let i = 0; i < sandCount; i += 1) {
       const i3 = i * 3;
-      sandPositions[i3] = (Math.random() - 0.5) * 210;
-      sandPositions[i3 + 1] = Math.random() * 30 + 0.6;
-      sandPositions[i3 + 2] = cameraState.z - Math.random() * 260;
-      sandVelocities[i3] = 5 + Math.random() * 18;
-      sandVelocities[i3 + 1] = (Math.random() - 0.5) * 1.4;
-      sandVelocities[i3 + 2] = (Math.random() - 0.5) * 2.4;
+      const x = (Math.random() - 0.5) * 260;
+      const z = cameraState.z - 210 + Math.random() * 360;
+      const surface = terrainHeight(x, z);
+      sandPositions[i3] = x;
+      sandPositions[i3 + 1] = surface + 0.18 + Math.random() * 3.2;
+      sandPositions[i3 + 2] = z;
+      sandVelocities[i3] = 0.45 + Math.random() * 1.1;
+      sandVelocities[i3 + 1] = 0.14 + Math.random() * 0.55;
+      sandVelocities[i3 + 2] = Math.random() * 0.22;
     }
     const sandGeometry = new THREE.BufferGeometry();
     sandGeometry.setAttribute("position", new THREE.BufferAttribute(sandPositions, 3));
@@ -512,9 +511,9 @@ export default function DesertScene() {
       sandGeometry,
       new THREE.PointsMaterial({
         color: "#ffe0b4",
-        size: 0.14,
+        size: 0.11,
         transparent: true,
-        opacity: 0.62,
+        opacity: 0.48,
         sizeAttenuation: true,
         depthWrite: false,
       }),
@@ -617,15 +616,26 @@ export default function DesertScene() {
 
     const updateSand = (delta: number) => {
       const { positions, velocities } = sandState;
+      const windX = 7.2;
+      const windZ = -1.9;
+      const minX = cameraState.x - 165;
+      const maxX = cameraState.x + 165;
+      const minZ = cameraState.z - 250;
+      const maxZ = cameraState.z + 130;
       for (let i = 0; i < positions.length; i += 3) {
-        positions[i] += (velocities[i] + 9) * delta;
-        positions[i + 1] += velocities[i + 1] * delta;
-        positions[i + 2] += velocities[i + 2] * delta;
-        if (positions[i] > cameraState.x + 100) positions[i] = cameraState.x - 110;
-        if (positions[i + 1] < 0.25) positions[i + 1] = 0.25 + Math.random() * 30;
-        if (positions[i + 1] > 31) positions[i + 1] = 0.3 + Math.random() * 4;
-        if (positions[i + 2] < cameraState.z - 240) positions[i + 2] = cameraState.z + 8;
-        if (positions[i + 2] > cameraState.z + 8) positions[i + 2] = cameraState.z - 240;
+        positions[i] += (windX + velocities[i]) * delta;
+        positions[i + 2] += (windZ + velocities[i + 2]) * delta;
+        const surface = terrainHeight(positions[i], positions[i + 2]);
+        const lift = velocities[i + 1];
+        positions[i + 1] += ((surface + lift) - positions[i + 1]) * 0.06;
+        positions[i + 1] += Math.sin(elapsed * 1.1 + i * 0.021) * 0.0025;
+
+        if (positions[i] > maxX) positions[i] = minX - Math.random() * 28;
+        if (positions[i] < minX) positions[i] = maxX + Math.random() * 28;
+        if (positions[i + 2] < minZ) positions[i + 2] = maxZ + Math.random() * 24;
+        if (positions[i + 2] > maxZ) positions[i + 2] = minZ - Math.random() * 24;
+        if (positions[i + 1] < surface + 0.05) positions[i + 1] = surface + 0.05 + Math.random() * 0.35;
+        if (positions[i + 1] > surface + 4.8) positions[i + 1] = surface + 0.2 + Math.random() * 1.7;
       }
       sandGeometry.attributes.position.needsUpdate = true;
     };
@@ -813,8 +823,6 @@ export default function DesertScene() {
       sandGeometry.dispose();
       (sand.material as THREE.Material).dispose();
       skyMaterial.dispose();
-      (sun.material as THREE.Material).dispose();
-      (sun.geometry as THREE.BufferGeometry).dispose();
       portraitTexture.dispose();
       portraitFigure.shadow.material.dispose();
       portraitFigure.dustGlow.material.dispose();
