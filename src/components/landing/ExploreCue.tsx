@@ -18,7 +18,7 @@ export default function ExploreCue() {
       className="pointer-events-none absolute inset-x-0 bottom-8 flex flex-col items-center gap-2 text-amber-100/40"
     >
       <span className="font-mono text-[10px] uppercase tracking-[0.35em]">
-        move to explore
+        drag to look
       </span>
       {reducedMotion ? (
         <span aria-hidden="true" className="block h-3 w-px bg-amber-100/40" />

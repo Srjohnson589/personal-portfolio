@@ -5,6 +5,12 @@ export type SystemNode = {
   /** Position as a percentage of the viewport, 0-100. */
   x: number;
   y: number;
+  /** Relative depth used to bias size/brightness; higher means nearer. */
+  depth: number;
+  /** Height of the visible structure in pixels. */
+  structureHeight: number;
+  /** Width of the visible structure in pixels. */
+  structureWidth: number;
 };
 
 /**
@@ -17,22 +23,31 @@ export const systemNodes: SystemNode[] = [
     id: "backend",
     label: "BACKEND",
     description: "Distributed services, queues, event-driven systems.",
-    x: 70,
-    y: 26,
+    x: 69,
+    y: 36,
+    depth: 0.34,
+    structureHeight: 178,
+    structureWidth: 30,
   },
   {
     id: "apis",
     label: "APIs",
     description: "Design, versioning, and developer experience.",
-    x: 87,
-    y: 48,
+    x: 84,
+    y: 51,
+    depth: 0.3,
+    structureHeight: 166,
+    structureWidth: 28,
   },
   {
     id: "integrations",
     label: "INTEGRATIONS",
     description: "Connecting disparate systems reliably.",
-    x: 64,
+    x: 62,
     y: 72,
+    depth: 0.58,
+    structureHeight: 198,
+    structureWidth: 24,
   },
   {
     id: "data",
@@ -40,13 +55,19 @@ export const systemNodes: SystemNode[] = [
     description: "Pipelines, modeling, and data quality.",
     x: 38,
     y: 83,
+    depth: 0.78,
+    structureHeight: 220,
+    structureWidth: 22,
   },
   {
     id: "ai",
     label: "AI",
     description: "Agentic workflows and applied AI systems.",
-    x: 82,
-    y: 18,
+    x: 80,
+    y: 22,
+    depth: 0.46,
+    structureHeight: 156,
+    structureWidth: 32,
   },
 ];
 

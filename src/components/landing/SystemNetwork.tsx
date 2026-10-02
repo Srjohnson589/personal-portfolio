@@ -6,42 +6,34 @@ import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { useViewportSize } from "@/hooks/use-viewport-size";
 import { systemEdges, systemNodes } from "./network-data";
 
-const PROXIMITY_RADIUS = 260;
-const LERP_FACTOR = 0.08;
-const BASE_PROMINENCE = 0.22;
+const PROXIMITY_RADIUS = 340;
+const LERP_FACTOR = 0.075;
+const BASE_PROMINENCE = 0.12;
 
 type NodeRuntime = {
   current: number;
   target: number;
   hover: boolean;
+  phase: number;
 };
 
 /**
- * The "hidden technical system" layer: a sparse graph of floating nodes
- * connected by thin, gently curved lines, with small packets of light
- * traveling between them. Nodes start subtle (partially obscured by the
- * environment) and become prominent as the cursor approaches or focuses
- * them.
- *
- * Node/edge visuals are read from refs and written directly to DOM nodes
- * each frame (not React state) so the interaction stays smooth without
- * triggering re-renders on every mouse move.
+ * The hidden technical system embedded in the desert: sparse monolith-like
+ * structures, subtle connections, and small request/response packets that
+ * make the network feel alive without turning it into a dashboard.
  */
 export default function SystemNetwork() {
   const pointer = usePointer();
   const reducedMotion = usePrefersReducedMotion();
   const { width, height } = useViewportSize();
 
-  const nodeRefs = useRef(new Map<string, HTMLButtonElement | null>());
-  const dotRefs = useRef(new Map<string, HTMLSpanElement | null>());
+  const structureRefs = useRef(new Map<string, HTMLButtonElement | null>());
   const labelRefs = useRef(new Map<string, HTMLSpanElement | null>());
   const descRefs = useRef(new Map<string, HTMLSpanElement | null>());
+  const glowRefs = useRef(new Map<string, HTMLSpanElement | null>());
   const edgeRefs = useRef(new Map<string, SVGPathElement | null>());
   const packetRefs = useRef<Array<SVGCircleElement | null>>([]);
 
-  // Lazily-initialized, mutated outside of render (inside the rAF loop and
-  // event handlers below) — using useState's initializer keeps this a single
-  // stable object without touching ref.current during render.
   const [runtime] = useState(() => {
     const map = new Map<string, NodeRuntime>();
     systemNodes.forEach((node) => {
@@ -49,6 +41,7 @@ export default function SystemNetwork() {
         current: BASE_PROMINENCE,
         target: BASE_PROMINENCE,
         hover: false,
+        phase: Math.random() * Math.PI * 2,
       });
     });
     return map;
@@ -64,14 +57,11 @@ export default function SystemNetwork() {
     [width, height],
   );
 
-  // Edges get a fixed, gentle curve (alternating sides) so the network
-  // reads as organic connections drifting through the environment rather
-  // than a sharp, geometric constellation diagram.
   const edgeGeometry = useMemo(() => {
     return systemEdges
       .map(([from, to], index) => {
-        const a = pixelNodes.find((n) => n.id === from);
-        const b = pixelNodes.find((n) => n.id === to);
+        const a = pixelNodes.find((node) => node.id === from);
+        const b = pixelNodes.find((node) => node.id === to);
         if (!a || !b) return null;
 
         const mx = (a.px + b.px) / 2;
@@ -98,13 +88,30 @@ export default function SystemNetwork() {
 
   const packets = useMemo(
     () =>
-      systemEdges.map(([from, to], index) => ({
-        id: `${from}-${to}`,
-        from,
-        to,
-        duration: 3.6 + (index % 3) * 0.9,
-        offset: (index * 0.37) % 1,
-      })),
+      systemEdges.flatMap(([from, to], index) => [
+        {
+          id: `${from}-${to}-req`,
+          edgeId: `${from}-${to}`,
+          from,
+          to,
+          direction: 1,
+          duration: 3.4 + (index % 3) * 0.6,
+          offset: (index * 0.23) % 1,
+          radius: 1.7,
+          opacity: 0.8,
+        },
+        {
+          id: `${from}-${to}-res`,
+          edgeId: `${from}-${to}`,
+          from: to,
+          to: from,
+          direction: -1,
+          duration: 4.2 + (index % 2) * 0.7,
+          offset: (index * 0.41 + 0.37) % 1,
+          radius: 1.35,
+          opacity: 0.45,
+        },
+      ]),
     [],
   );
 
@@ -112,18 +119,15 @@ export default function SystemNetwork() {
     const rt = runtime.get(id);
     if (rt) rt.hover = isHovered;
 
-    // When motion is reduced, the animation loop below never runs, so apply
-    // the hover affordance instantly and directly instead.
     if (reducedMotion) {
+      const structure = structureRefs.current.get(id);
       const label = labelRefs.current.get(id);
       const desc = descRefs.current.get(id);
-      const dot = dotRefs.current.get(id);
-      const button = nodeRefs.current.get(id);
-      if (label) label.style.opacity = isHovered ? "1" : "0.85";
+      const glow = glowRefs.current.get(id);
+      if (structure) structure.style.opacity = isHovered ? "1" : "0.9";
+      if (label) label.style.opacity = isHovered ? "1" : "0.32";
       if (desc) desc.style.opacity = isHovered ? "1" : "0";
-      if (dot) dot.style.opacity = isHovered ? "1" : "0.8";
-      if (button)
-        button.style.transform = `translate(-50%, -50%) scale(${isHovered ? 1.06 : 1})`;
+      if (glow) glow.style.opacity = isHovered ? "0.72" : "0.22";
     }
   };
 
@@ -131,20 +135,22 @@ export default function SystemNetwork() {
     if (width === 0 || height === 0) return;
 
     if (reducedMotion) {
-      // Static, fully legible state — no continuous animation.
       pixelNodes.forEach((node) => {
-        const button = nodeRefs.current.get(node.id);
+        const structure = structureRefs.current.get(node.id);
         const label = labelRefs.current.get(node.id);
-        const dot = dotRefs.current.get(node.id);
-        if (button) button.style.transform = "translate(-50%, -50%) scale(1)";
-        if (label) label.style.opacity = "0.85";
-        if (dot) dot.style.opacity = "0.8";
+        const desc = descRefs.current.get(node.id);
+        const glow = glowRefs.current.get(node.id);
+        if (structure) structure.style.transform = "translate(-50%, -100%) scale(0.94)";
+        if (structure) structure.style.opacity = "0.9";
+        if (label) label.style.opacity = "0.32";
+        if (desc) desc.style.opacity = "0";
+        if (glow) glow.style.opacity = "0.22";
       });
       edgeGeometry.forEach((edge) => {
         const path = edgeRefs.current.get(edge.id);
         if (path) {
-          path.setAttribute("stroke-opacity", "0.28");
-          path.setAttribute("stroke-width", "1.1");
+          path.setAttribute("stroke-opacity", "0.26");
+          path.setAttribute("stroke-width", "1.15");
         }
       });
       return;
@@ -167,26 +173,41 @@ export default function SystemNetwork() {
         const distance = Math.sqrt(dx * dx + dy * dy);
         const proximity = Math.max(0, 1 - distance / PROXIMITY_RADIUS);
 
-        rt.target = rt.hover ? 1 : Math.max(BASE_PROMINENCE, proximity);
+        rt.target = rt.hover
+          ? 1
+          : Math.max(BASE_PROMINENCE, proximity * 0.92 + node.depth * 0.08);
         rt.current += (rt.target - rt.current) * LERP_FACTOR;
 
-        const button = nodeRefs.current.get(node.id);
+        const prominence = rt.current;
+        const structure = structureRefs.current.get(node.id);
         const label = labelRefs.current.get(node.id);
         const desc = descRefs.current.get(node.id);
-        const dot = dotRefs.current.get(node.id);
-        const prominence = rt.current;
+        const glow = glowRefs.current.get(node.id);
 
-        if (button) {
-          button.style.transform = `translate(-50%, -50%) scale(${(0.82 + prominence * 0.32).toFixed(3)})`;
+        if (structure) {
+          const bob =
+            Math.sin(elapsed * (0.65 + node.depth * 0.35) + rt.phase) *
+            (0.8 + node.depth * 1.3);
+          const scale = 0.86 + node.depth * 0.18 + prominence * 0.2;
+          const rise = (1 - prominence) * 14 + bob;
+          structure.style.transform = `translate(-50%, -100%) translateY(${rise.toFixed(
+            2,
+          )}px) scale(${scale.toFixed(3)})`;
+          structure.style.opacity = (0.18 + node.depth * 0.42 + prominence * 0.38).toFixed(
+            3,
+          );
+          structure.style.filter = `drop-shadow(0 0 ${(8 + prominence * 16).toFixed(
+            1,
+          )}px rgba(255, 203, 137, ${(0.06 + prominence * 0.15).toFixed(3)}))`;
         }
         if (label) {
-          label.style.opacity = (0.16 + prominence * 0.84).toFixed(3);
-        }
-        if (dot) {
-          dot.style.opacity = (0.35 + prominence * 0.65).toFixed(3);
+          label.style.opacity = (0.05 + prominence * 0.9).toFixed(3);
         }
         if (desc) {
-          desc.style.opacity = Math.max(0, (prominence - 0.7) / 0.3).toFixed(3);
+          desc.style.opacity = Math.max(0, (prominence - 0.52) / 0.4).toFixed(3);
+        }
+        if (glow) {
+          glow.style.opacity = (0.12 + prominence * 0.58).toFixed(3);
         }
       });
 
@@ -196,20 +217,21 @@ export default function SystemNetwork() {
         const a = runtime.get(edge.from)?.current ?? BASE_PROMINENCE;
         const b = runtime.get(edge.to)?.current ?? BASE_PROMINENCE;
         const strength = (a + b) / 2;
-        path.setAttribute("stroke-opacity", (0.06 + strength * 0.32).toFixed(3));
-        path.setAttribute("stroke-width", (0.75 + strength * 1.25).toFixed(2));
+        path.setAttribute("stroke-opacity", (0.05 + strength * 0.34).toFixed(3));
+        path.setAttribute("stroke-width", (0.7 + strength * 1.15).toFixed(2));
       });
 
       packets.forEach((packet, index) => {
         const circle = packetRefs.current[index];
         if (!circle) return;
-        const edge = edgeGeometry.find((e) => e.id === packet.id);
+        const edge = edgeGeometry.find((candidate) => candidate.id === packet.edgeId);
         if (!edge) return;
 
-        const t = (elapsed / packet.duration + packet.offset) % 1;
+        let t = (elapsed / packet.duration + packet.offset) % 1;
+        if (packet.direction < 0) t = 1 - t;
         const eased = t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2;
         const inv = 1 - eased;
-        // Quadratic bezier point, matching the edge path's curve.
+
         const cx =
           inv * inv * edge.a.px +
           2 * inv * eased * edge.cx +
@@ -226,7 +248,11 @@ export default function SystemNetwork() {
 
         circle.setAttribute("cx", cx.toFixed(2));
         circle.setAttribute("cy", cy.toFixed(2));
-        circle.setAttribute("opacity", (0.25 + strength * 0.65).toFixed(3));
+        circle.setAttribute(
+          "opacity",
+          (packet.opacity * (0.25 + strength * 0.8)).toFixed(3),
+        );
+        circle.setAttribute("r", (packet.radius + strength * 0.85).toFixed(2));
       });
 
       frame = requestAnimationFrame(loop);
@@ -278,7 +304,7 @@ export default function SystemNetwork() {
               ref={(el) => {
                 packetRefs.current[index] = el;
               }}
-              r={2}
+              r={packet.radius}
               fill="rgba(255, 236, 200, 0.95)"
               style={{
                 filter: "drop-shadow(0 0 3px rgba(255, 220, 170, 0.9))",
@@ -298,11 +324,15 @@ export default function SystemNetwork() {
               <button
                 type="button"
                 ref={(el) => {
-                  nodeRefs.current.set(node.id, el);
+                  structureRefs.current.set(node.id, el);
                 }}
                 aria-label={`${node.label}. ${node.description}`}
-                className="group relative flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2 rounded-full p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-100/70"
-                style={{ transform: "translate(-50%, -50%) scale(0.82)" }}
+                className="group relative flex flex-col items-center border-0 bg-transparent p-0 outline-none focus-visible:ring-2 focus-visible:ring-amber-100/70"
+                style={{
+                  transform: "translate(-50%, -100%) translateY(12px) scale(0.94)",
+                  transformOrigin: "50% 100%",
+                  willChange: "transform, opacity, filter",
+                }}
                 onMouseEnter={() => setHover(node.id, true)}
                 onMouseLeave={() => setHover(node.id, false)}
                 onFocus={() => setHover(node.id, true)}
@@ -310,19 +340,49 @@ export default function SystemNetwork() {
               >
                 <span
                   ref={(el) => {
-                    dotRefs.current.set(node.id, el);
+                    glowRefs.current.set(node.id, el);
                   }}
                   aria-hidden="true"
-                  className="block h-2.5 w-2.5 rounded-full bg-amber-100 shadow-[0_0_12px_4px_rgba(255,214,150,0.5)] transition-shadow group-hover:shadow-[0_0_18px_6px_rgba(255,214,150,0.75)]"
-                  style={{ opacity: 0.35 + BASE_PROMINENCE * 0.65 }}
+                  className="pointer-events-none absolute left-1/2 top-0 h-48 w-48 -translate-x-1/2 -translate-y-8 rounded-full bg-[radial-gradient(circle,rgba(255,197,130,0.45),transparent_68%)] blur-3xl"
+                  style={{ opacity: 0.22 }}
                 />
+
+                <div
+                  className="relative flex items-end justify-center"
+                  style={{
+                    height: `${node.structureHeight}px`,
+                    width: `${node.structureWidth}px`,
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-x-1/2 bottom-0 h-[95%] w-full -translate-x-1/2 rounded-t-[999px] bg-[linear-gradient(180deg,rgba(255,234,198,0.04)_0%,rgba(255,198,122,0.28)_45%,rgba(64,35,18,0.68)_100%)] ring-1 ring-amber-100/10"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-x-[18%] bottom-[10%] h-[76%] rounded-t-[999px] bg-[linear-gradient(180deg,rgba(255,247,230,0.2)_0%,rgba(247,205,133,0.32)_42%,rgba(120,68,28,0.16)_100%)]"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="absolute bottom-[10%] left-1/2 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-amber-100 shadow-[0_0_12px_4px_rgba(255,214,150,0.55)]"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="absolute left-1/2 top-[10px] h-3 w-3 -translate-x-1/2 rounded-full bg-amber-50 shadow-[0_0_10px_4px_rgba(255,227,180,0.55)]"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-y-[18%] left-1/2 w-px -translate-x-1/2 bg-[linear-gradient(180deg,transparent,rgba(255,232,198,0.5),transparent)]"
+                  />
+                </div>
+
                 <span
                   ref={(el) => {
                     labelRefs.current.set(node.id, el);
                   }}
                   aria-hidden="true"
-                  className="whitespace-nowrap font-mono text-[11px] tracking-[0.3em] text-amber-100"
-                  style={{ opacity: 0.16 + BASE_PROMINENCE * 0.84 }}
+                  className="mt-3 whitespace-nowrap font-mono text-[11px] tracking-[0.34em] text-amber-100"
+                  style={{ opacity: 0.18 }}
                 >
                   {node.label}
                 </span>
@@ -331,7 +391,7 @@ export default function SystemNetwork() {
                     descRefs.current.set(node.id, el);
                   }}
                   aria-hidden="true"
-                  className="max-w-[12rem] text-center text-[11px] leading-snug text-amber-50/80"
+                  className="mt-2 max-w-[14rem] text-center text-[11px] leading-snug text-amber-50/80"
                   style={{ opacity: 0 }}
                 >
                   {node.description}
