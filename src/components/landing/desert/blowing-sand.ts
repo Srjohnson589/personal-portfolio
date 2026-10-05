@@ -104,7 +104,7 @@ export function createSaltation(shared: SharedUniforms, count: number) {
 type VeilOptions = {
   origins: Float32Array;
   count: number;
-  drift: boolean;
+  mode?: "drift" | "burst";
   rate: number;
   travel: number;
   lift: number;
@@ -130,7 +130,7 @@ function createVeil(shared: SharedUniforms, options: VeilOptions) {
   const material = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
-    defines: options.drift ? { DRIFT: "" } : {},
+    defines: options.mode ? { [options.mode.toUpperCase()]: "" } : {},
     uniforms: {
       ...shared,
       uRate: { value: options.rate },
@@ -141,6 +141,7 @@ function createVeil(shared: SharedUniforms, options: VeilOptions) {
       uStretch: { value: options.stretch },
       uOpacity: { value: options.opacity },
       uBox: { value: options.box ?? 0 },
+      uStart: { value: -1000 },
     },
     vertexShader: /* glsl */ `
       attribute vec3 aOrigin;
@@ -153,6 +154,7 @@ function createVeil(shared: SharedUniforms, options: VeilOptions) {
       uniform float uStretch;
       uniform float uOpacity;
       uniform float uBox;
+      uniform float uStart;
       varying vec2 vCorner;
       varying vec2 vSeed;
       varying vec3 vColor;
@@ -171,6 +173,15 @@ function createVeil(shared: SharedUniforms, options: VeilOptions) {
           float size = mix(uSize.x, uSize.y, aSeed.w);
           vec3 center = vec3(p.x, ground + size * 0.22, p.y);
           float envelope = smoothstep(uBox * 0.5, uBox * 0.3, length(rel)) * (0.55 + 0.45 * sin(uTime * 0.35 + aSeed.x * 6.283));
+        #elif defined(BURST)
+          float life = (uTime - uStart) * uRate * (0.6 + 0.8 * aSeed.y) - aSeed.x * 0.35;
+          vec3 center = aOrigin
+            + wind * life * uTravel * (0.5 + aSeed.z)
+            + side * (aSeed.w - 0.5) * uSpread * (0.4 + life)
+            + vec3(0.0, uLift * life * (1.0 - 0.6 * life) * (0.5 + aSeed.z), 0.0);
+          float ground = texture2D(uHeight, terrainUv(center.xz)).r;
+          float size = mix(uSize.x, uSize.y, clamp(life, 0.0, 1.0));
+          float envelope = step(0.0, life) * step(life, 1.0) * smoothstep(0.0, 0.06, life) * pow(max(1.0 - life, 0.0), 1.6);
         #else
           float life = fract(uTime * uRate * (0.7 + 0.6 * aSeed.y) + aSeed.x);
           vec3 center = aOrigin
@@ -191,9 +202,14 @@ function createVeil(shared: SharedUniforms, options: VeilOptions) {
         view.xy += (dir * corner.x * stretch + vec2(-dir.y, dir.x) * corner.y) * size;
         gl_Position = projectionMatrix * view;
 
-        float nearFade = smoothstep(1.5, 9.0, -view.z);
         float farFade = 1.0 - smoothstep(280.0, 460.0, length(center - cameraPosition));
-        vAlpha = envelope * gustField(center.xz) * nearFade * farFade * uOpacity;
+        #ifdef BURST
+          float nearFade = smoothstep(0.6, 2.5, -view.z);
+          vAlpha = envelope * nearFade * farFade * uOpacity;
+        #else
+          float nearFade = smoothstep(1.5, 9.0, -view.z);
+          vAlpha = envelope * gustField(center.xz) * nearFade * farFade * uOpacity;
+        #endif
 
         float sunVisibility = max(texture2D(uLight, terrainUv(center.xz)).r, smoothstep(1.0, 6.0, center.y - ground));
         float forward = min(phaseHG(dot(normalize(center - cameraPosition), uSunDir), 0.62), 9.0);
@@ -241,7 +257,6 @@ export function createCrestPlumes(shared: SharedUniforms, crests: Float32Array, 
   return createVeil(shared, {
     origins,
     count,
-    drift: false,
     rate: 0.16,
     travel: 16,
     lift: 1.4,
@@ -256,7 +271,7 @@ export function createDriftSheets(shared: SharedUniforms, count: number) {
   return createVeil(shared, {
     origins: seeds(count, 3),
     count,
-    drift: true,
+    mode: "drift",
     rate: 0,
     travel: 0,
     lift: 0,
@@ -266,4 +281,29 @@ export function createDriftSheets(shared: SharedUniforms, count: number) {
     opacity: 0.075,
     box: 420,
   });
+}
+
+export function createSandBurst(shared: SharedUniforms, origin: THREE.Vector3, radius: number, count: number) {
+  const origins = new Float32Array(count * 3);
+  for (let i = 0; i < count; i += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const r = Math.sqrt(Math.random()) * radius;
+    origins[i * 3] = origin.x + Math.cos(angle) * r;
+    origins[i * 3 + 1] = origin.y + Math.random() * 0.3;
+    origins[i * 3 + 2] = origin.z + Math.sin(angle) * r;
+  }
+  const mesh = createVeil(shared, {
+    origins,
+    count,
+    mode: "burst",
+    rate: 0.42,
+    travel: 11,
+    lift: 2.6,
+    spread: 4,
+    size: [0.35, 2.8],
+    stretch: 2,
+    opacity: 0.55,
+  });
+  const start = (mesh.material as THREE.ShaderMaterial).uniforms.uStart;
+  return { mesh, start };
 }

@@ -3,10 +3,11 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
-import { createCrestPlumes, createDriftSheets, createSaltation } from "./desert/blowing-sand";
+import { createCrestPlumes, createDriftSheets, createSandBurst, createSaltation } from "./desert/blowing-sand";
 import { createPost } from "./desert/post";
 import { createSharedUniforms } from "./desert/shaders";
 import { createSky } from "./desert/sky";
+import { createStrongbox } from "./desert/strongbox";
 import { bakeTerrainLighting, createTerrainMaterial } from "./desert/terrain";
 import {
   SUN_DIRECTION,
@@ -15,6 +16,8 @@ import {
   sampleHeight,
   type Flat,
 } from "./desert/terrain-data";
+import { isFound } from "./journal/found-store";
+import { relicById } from "./journal/relics";
 
 type CameraState = { x: number; z: number; yaw: number; pitch: number };
 type IntegrationNodeDefinition = {
@@ -117,6 +120,8 @@ const TERRAIN_FLATS: Flat[] = [
   { x: 48, z: -188, radius: 78 },
 ];
 const EYE_HEIGHT = 1.75;
+const BOUNDS = { minX: -140, maxX: 140, minZ: -350, maxZ: 80 };
+const UNCOVER_SECONDS = 2.8;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
@@ -322,7 +327,12 @@ function createCurvePoints(a: THREE.Vector3, b: THREE.Vector3, lift = 12) {
   return new THREE.QuadraticBezierCurve3(a, control, b);
 }
 
-export default function DesertScene() {
+const shortestAngle = (from: number, to: number) =>
+  Math.atan2(Math.sin(to - from), Math.cos(to - from));
+
+type DesertSceneProps = { onRelicFound: (id: string) => void };
+
+export default function DesertScene({ onRelicFound }: DesertSceneProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const cameraRef = useRef<CameraState>({ x: 0, z: 46, yaw: 0, pitch: -0.035 });
   const dragRef = useRef<{
@@ -334,6 +344,11 @@ export default function DesertScene() {
   } | null>(null);
   const keysRef = useRef(new Set<string>());
   const reducedMotion = usePrefersReducedMotion();
+  const onRelicFoundRef = useRef(onRelicFound);
+
+  useEffect(() => {
+    onRelicFoundRef.current = onRelicFound;
+  }, [onRelicFound]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -362,6 +377,8 @@ export default function DesertScene() {
     const cameraState = cameraRef.current;
     const walkSpeed = 15;
     let pendingTravel = 0;
+    let walkTarget: { x: number; z: number } | null = null;
+    let approachingRelic = false;
 
     const terrainData = generateTerrain(TERRAIN_FLATS);
     const groundAt = (x: number, z: number) => sampleHeight(terrainData.heights, x, z);
@@ -391,6 +408,77 @@ export default function DesertScene() {
     const plumes = createCrestPlumes(shared, terrainData.crests, compact ? 4 : 7);
     const driftSheets = createDriftSheets(shared, compact ? 120 : 220);
     scene.add(driftSheets, plumes, saltation.mesh);
+
+    const relic = relicById("strongbox")!;
+    const relicGround = groundAt(relic.position.x, relic.position.z);
+    const relicNormal = new THREE.Vector3(
+      groundAt(relic.position.x - 1, relic.position.z) - groundAt(relic.position.x + 1, relic.position.z),
+      2,
+      groundAt(relic.position.x, relic.position.z - 1) - groundAt(relic.position.x, relic.position.z + 1),
+    ).normalize();
+    const relicPosition = new THREE.Vector3(relic.position.x, relicGround, relic.position.z);
+    const strongbox = createStrongbox(shared, relicPosition, relicNormal);
+    scene.add(strongbox.group);
+    const burst = createSandBurst(shared, relicPosition, 1.1, compact ? 70 : 140);
+    scene.add(burst.mesh);
+    let uncovering = isFound(relic.id) ? -1 : 0;
+    if (uncovering === -1) strongbox.setProgress(1);
+    let gustBoost = 0;
+
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+
+    const pointerRay = (event: globalThis.PointerEvent) => {
+      const bounds = renderer.domElement.getBoundingClientRect();
+      pointer.set(
+        ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+        -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
+      );
+      updateCamera();
+      raycaster.setFromCamera(pointer, camera);
+      return raycaster.ray;
+    };
+
+    const hitsRelic = () =>
+      uncovering === 0 && raycaster.intersectObject(strongbox.hitTarget, false).length > 0;
+
+    const groundHit = (ray: THREE.Ray) => {
+      let previous = 0;
+      for (let t = 1; t < 900; t += 0.4 + t * 0.012) {
+        const x = ray.origin.x + ray.direction.x * t;
+        const z = ray.origin.z + ray.direction.z * t;
+        if (ray.origin.y + ray.direction.y * t > groundAt(x, z)) {
+          previous = t;
+          continue;
+        }
+        let low = previous;
+        let high = t;
+        for (let i = 0; i < 10; i += 1) {
+          const mid = (low + high) / 2;
+          const above = ray.origin.y + ray.direction.y * mid > groundAt(ray.origin.x + ray.direction.x * mid, ray.origin.z + ray.direction.z * mid);
+          if (above) low = mid;
+          else high = mid;
+        }
+        return { x: ray.origin.x + ray.direction.x * high, z: ray.origin.z + ray.direction.z * high };
+      }
+      return null;
+    };
+
+    const approachRelic = () => {
+      const away = new THREE.Vector2(cameraState.x - relicPosition.x, cameraState.z - relicPosition.z);
+      if (away.lengthSq() < 1e-4) away.set(0, 1);
+      away.normalize().multiplyScalar(3.4);
+      walkTarget = { x: relicPosition.x + away.x, z: relicPosition.z + away.y };
+      approachingRelic = true;
+      pendingTravel = 0;
+    };
+
+    const startUncover = () => {
+      if (uncovering !== 0) return;
+      uncovering = 1e-4;
+      gustBoost = 1;
+      burst.start.value = elapsed;
+    };
 
     const portraitTexture = new THREE.TextureLoader().load("/sarah-ferg.png");
     portraitTexture.colorSpace = THREE.SRGBColorSpace;
@@ -497,6 +585,8 @@ export default function DesertScene() {
     };
 
     const queueTravel = (distance: number) => {
+      walkTarget = null;
+      approachingRelic = false;
       pendingTravel = clamp(pendingTravel + distance, -80, 80);
     };
 
@@ -506,7 +596,8 @@ export default function DesertScene() {
         0,
         1,
       );
-      shared.uGust.value = gust;
+      gustBoost *= Math.exp(-delta * 0.7);
+      shared.uGust.value = clamp(gust + gustBoost * 0.5, 0, 1.3);
       shared.uFlow.value += delta * 5.5 * (0.55 + 0.6 * gust);
       shared.uTime.value = elapsed;
       rippleTime.value += delta * 0.03 * (0.4 + gust);
@@ -514,6 +605,9 @@ export default function DesertScene() {
 
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
+      if (key === "enter" && event.target === renderer.domElement && uncovering === 0) {
+        if (Math.hypot(cameraState.x - relicPosition.x, cameraState.z - relicPosition.z) < 10) approachRelic();
+      }
       if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) {
         keysRef.current.add(key);
         if (event.target === renderer.domElement) event.preventDefault();
@@ -536,6 +630,10 @@ export default function DesertScene() {
       const keys = keysRef.current;
       const forward = Number(keys.has("w") || keys.has("arrowup")) - Number(keys.has("s") || keys.has("arrowdown"));
       const lateral = Number(keys.has("d") || keys.has("arrowright")) - Number(keys.has("a") || keys.has("arrowleft"));
+      if ((forward || lateral) && walkTarget) {
+        walkTarget = null;
+        approachingRelic = false;
+      }
       cameraState.x += (Math.cos(cameraState.yaw) * lateral + Math.sin(cameraState.yaw) * forward) * walkSpeed * delta;
       cameraState.z += (Math.sin(cameraState.yaw) * lateral - Math.cos(cameraState.yaw) * forward) * walkSpeed * delta;
 
@@ -546,8 +644,42 @@ export default function DesertScene() {
         pendingTravel -= travelStep;
       }
 
-      cameraState.x = clamp(cameraState.x, -140, 140);
-      cameraState.z = clamp(cameraState.z, -350, 80);
+      if (walkTarget) {
+        const dx = walkTarget.x - cameraState.x;
+        const dz = walkTarget.z - cameraState.z;
+        const distance = Math.hypot(dx, dz);
+        const step = Math.min(distance, Math.min(16, 0.8 + distance * 1.3) * delta);
+        if (distance > 1e-3) {
+          cameraState.x += (dx / distance) * step;
+          cameraState.z += (dz / distance) * step;
+        }
+        if (approachingRelic) {
+          const facing = Math.atan2(relicPosition.x - cameraState.x, -(relicPosition.z - cameraState.z));
+          const turn = Math.min(1, delta * 2.2);
+          cameraState.yaw += shortestAngle(cameraState.yaw, facing) * turn;
+          const look = Math.atan2(relicPosition.y + 0.2 - eyeHeight, Math.max(distance + 3.4, 3.4));
+          cameraState.pitch += (look - cameraState.pitch) * turn;
+        }
+        if (distance < 0.12) {
+          walkTarget = null;
+          if (approachingRelic) startUncover();
+          approachingRelic = false;
+        }
+      }
+
+      if (uncovering > 0 && uncovering < 1) {
+        uncovering = reducedMotion ? 1 : Math.min(1, uncovering + delta / UNCOVER_SECONDS);
+        strongbox.setProgress(uncovering);
+        if (uncovering === 1) onRelicFoundRef.current(relic.id);
+      }
+      const relicDistance = camera.position.distanceTo(relicPosition);
+      const shimmer = reducedMotion ? 0.6 : 0.45 + 1.1 * Math.pow(0.5 + 0.5 * Math.sin(elapsed * 1.6), 12);
+      strongbox.setGlint(
+        uncovering === 0 ? shimmer * THREE.MathUtils.smoothstep(relicDistance, 4, 12) : 0,
+      );
+
+      cameraState.x = clamp(cameraState.x, BOUNDS.minX, BOUNDS.maxX);
+      cameraState.z = clamp(cameraState.z, BOUNDS.minZ, BOUNDS.maxZ);
       eyeHeight += (eyeTarget(cameraState.x, cameraState.z) - eyeHeight) * Math.min(1, delta * 4);
       eyeHeight = Math.max(eyeHeight, groundAt(cameraState.x, cameraState.z) + EYE_HEIGHT * 0.7);
 
@@ -660,7 +792,12 @@ export default function DesertScene() {
 
     const handlePointerMove = (event: globalThis.PointerEvent) => {
       const drag = dragRef.current;
-      if (!drag) return;
+      if (!drag) {
+        if (event.pointerType === "mouse") {
+          renderer.domElement.style.cursor = (pointerRay(event), hitsRelic()) ? "pointer" : "";
+        }
+        return;
+      }
       if (Math.abs(event.clientX - drag.x) > 4 || Math.abs(event.clientY - drag.y) > 4) {
         drag.moved = true;
       }
@@ -668,10 +805,23 @@ export default function DesertScene() {
       cameraState.pitch = clamp(drag.pitch + (event.clientY - drag.y) * 0.0024, -0.62, 0.48);
     };
 
-    const handlePointerUp = () => {
+    const handlePointerUp = (event: globalThis.PointerEvent) => {
       const drag = dragRef.current;
-      if (drag && !drag.moved) {
-        queueTravel(14);
+      if (drag && !drag.moved && event.type === "pointerup") {
+        const ray = pointerRay(event);
+        const hit = hitsRelic() ? null : groundHit(ray);
+        if (hitsRelic()) {
+          approachRelic();
+        } else if (hit) {
+          walkTarget = {
+            x: clamp(hit.x, BOUNDS.minX, BOUNDS.maxX),
+            z: clamp(hit.z, BOUNDS.minZ, BOUNDS.maxZ),
+          };
+          approachingRelic = false;
+          pendingTravel = 0;
+        } else {
+          queueTravel(14);
+        }
       }
       dragRef.current = null;
     };
@@ -679,7 +829,7 @@ export default function DesertScene() {
     renderer.domElement.tabIndex = 0;
     renderer.domElement.setAttribute(
       "aria-label",
-      "Immersive desert. Drag to look around. Click or scroll to move through the environment.",
+      "Immersive desert. Drag to look around. Click the sand to walk there, or use the arrow keys. Press Enter near a half-buried object to uncover it.",
     );
     renderer.domElement.setAttribute("role", "group");
     renderer.domElement.addEventListener("pointerdown", handlePointerDown);
@@ -712,7 +862,8 @@ export default function DesertScene() {
       terrainMaterial.dispose();
       terrainData.heightTexture.dispose();
       lighting.dispose();
-      [saltation.mesh, plumes, driftSheets].forEach((mesh) => {
+      strongbox.dispose();
+      [saltation.mesh, plumes, driftSheets, burst.mesh].forEach((mesh) => {
         mesh.geometry.dispose();
         (mesh.material as THREE.Material).dispose();
       });
